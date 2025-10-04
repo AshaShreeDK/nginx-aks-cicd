@@ -4,6 +4,11 @@ trigger:
 pool:
   vmImage: 'ubuntu-latest'
 
+variables:
+  aksResourceGroup: 'AksRG'
+  aksClusterName: 'Asha-Aks-Cluster'
+  manifestsPath: 'k8s'
+
 steps:
 - checkout: self
 
@@ -36,6 +41,6 @@ steps:
     if [ -n "${IP:-}" ]; then
       echo "http://$IP/"
     else
-      echo "No external IP yet. Check again in a minute: kubectl -n nginx-demo get svc nginx -w"
+      echo "No external IP yet"
     fi
   displayName: 'Show public URL'
