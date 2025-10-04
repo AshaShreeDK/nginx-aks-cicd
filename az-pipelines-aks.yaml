@@ -1,0 +1,53 @@
+trigger:
+- master
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  aksResourceGroup: 'AksRG'
+  aksClusterName: 'Asha-Aks-Cluster'
+  manifestsPath: 'k8s'
+
+steps:
+- checkout: self
+
+- task: AzureCLI@2
+  displayName: 'AKS login, kubeconfig (AAD), deploy'
+  inputs:
+    azureSubscription: 'azure-sub-connection'
+    scriptType: bash
+    scriptLocation: inlineScript
+    inlineScript: |
+      set -e
+
+      echo "🔹 Installing kubectl and kubelogin"
+      az aks install-cli
+
+      echo "🔹 Getting kubeconfig with AAD (no --admin)"
+      az aks get-credentials -g "$AKS_RG" -n "$AKS_NAME" --overwrite-existing
+      kubelogin convert-kubeconfig -l azurecli
+
+      echo "🔹 Verifying access"
+      kubectl config current-context
+      kubectl get nodes -o wide
+
+      echo "🔹 Deploying manifests"
+      kubectl apply -f "$MANIFESTS/namespace.yaml"
+      kubectl apply -f "$MANIFESTS/deployment.yaml"
+      kubectl apply -f "$MANIFESTS/service.yaml"
+
+      echo "🔹 Waiting for rollout"
+      kubectl -n nginx-demo rollout status deploy/nginx --timeout=180s
+      kubectl -n nginx-demo get svc nginx -o wide
+  env:
+    AKS_RG: $(aksResourceGroup)
+    AKS_NAME: $(aksClusterName)
+    MANIFESTS: $(manifestsPath)
+
+- script: |
+    set -e
+    echo "🔹 Fetching public LoadBalancer IP"
+    IP=$(kubectl -n nginx-demo get svc nginx -o jsonpath="{.status.loadBalancer.ingress[0].ip}")
+    echo "✅ Public URL: http://$IP/"
+  displayName: 'Show Public URL'
