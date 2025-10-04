@@ -23,7 +23,6 @@ steps:
       az aks get-credentials -g "$RG" -n "$AKS" --overwrite-existing
       kubelogin convert-kubeconfig -l azurecli
 
-      kubectl auth can-i get nodes --all-namespaces
       kubectl get nodes -o wide
 
       kubectl apply -f "$MANIFESTS/namespace.yaml"
