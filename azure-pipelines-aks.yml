@@ -1,0 +1,46 @@
+trigger:
+- master
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  RG: "AksRG"
+  AKS: "Asha-Aks-Cluster"
+  MANIFESTS: "k8s"
+
+steps:
+- task: AzureCLI@2
+  displayName: 'AKS login, deploy & show public URL'
+  inputs:
+    azureSubscription: 'azure-sub-connection'   # your service connection name
+    scriptType: bash
+    scriptLocation: inlineScript
+    inlineScript: |
+      set -euo pipefail
+
+      echo "🔹 Installing AKS CLI tools"
+      az aks install-cli
+
+      echo "🔹 Getting AKS credentials"
+      az aks get-credentials -g "$RG" -n "$AKS" --overwrite-existing
+      kubelogin convert-kubeconfig -l azurecli
+
+      echo "🔹 Applying Kubernetes manifests"
+      kubectl apply -f "$MANIFESTS/namespace.yaml"
+      kubectl apply -f "$MANIFESTS/deployment.yaml"
+      kubectl apply -f "$MANIFESTS/service.yaml"
+
+      echo "🔹 Waiting for rollout"
+      kubectl -n nginx-demo rollout status deploy/nginx --timeout=180s
+
+      echo "🔹 Getting service details"
+      kubectl -n nginx-demo get svc nginx -o wide
+
+      echo "🔹 Fetching public LoadBalancer IP"
+      IP=$(kubectl -n nginx-demo get svc nginx -o jsonpath="{.status.loadBalancer.ingress[0].ip}" || true)
+      if [ -n "${IP:-}" ]; then
+        echo "✅ Public URL: http://$IP/"
+      else
+        echo "⚠️ No external IP assigned yet"
+      fi
