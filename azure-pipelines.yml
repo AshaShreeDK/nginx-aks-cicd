@@ -1,41 +1,35 @@
-trigger:
-  branches:
-    include:
-      - master
-  paths:
-    include:
-      - k8s/**
+steps:
+- checkout: self
 
-variables:
-  aksResourceGroup: 'AksRG'
-  aksClusterName: 'Asha-Aks-Cluster'
-  manifestsPath: 'k8s'
+# Login to Azure (uses your service connection)
+- task: AzureCLI@2
+  displayName: 'Login to Azure'
+  inputs:
+    azureSubscription: 'azure-sub-connection'
+    scriptType: bash
+    scriptLocation: inlineScript
+    inlineScript: |
+      echo "Logged in with federated identity"
 
-stages:
-- stage: Deploy
-  displayName: Deploy to AKS
-  jobs:
-  - job: ApplyManifests
-    pool:
-      vmImage: 'ubuntu-latest'
-    steps:
-    - checkout: self
+# Install kubectl + kubelogin
+- script: |
+    az aks install-cli
+    echo "PATH after install:"
+    echo $PATH
+  displayName: 'Install kubectl & kubelogin'
 
-    - task: AzureCLI@2
-      displayName: 'Login to Azure & Get AKS Credentials'
-      inputs:
-        azureSubscription: 'azure-sub-connection'
-        scriptType: bash
-        scriptLocation: inlineScript
-        inlineScript: |
-          az aks get-credentials -g $(aksResourceGroup) -n $(aksClusterName) --overwrite-existing
-          kubectl get nodes
+# Get AKS creds and convert kubeconfig for AAD
+- script: |
+    az aks get-credentials -g $(aksResourceGroup) -n $(aksClusterName) --overwrite-existing
+    kubelogin convert-kubeconfig -l azurecli
+    kubectl get nodes
+  displayName: 'Get AKS credentials & verify cluster access'
 
-    - script: |
-        kubectl apply -f $(manifestsPath)/namespace.yaml
-        kubectl apply -f $(manifestsPath)/deployment.yaml
-        kubectl apply -f $(manifestsPath)/service.yaml
-        kubectl -n nginx-demo rollout status deploy/nginx --timeout=180s
-        kubectl -n nginx-demo get svc nginx -o wide
-      displayName: 'kubectl apply & rollout status'
-
+# Apply manifests
+- script: |
+    kubectl apply -f $(manifestsPath)/namespace.yaml
+    kubectl apply -f $(manifestsPath)/deployment.yaml
+    kubectl apply -f $(manifestsPath)/service.yaml
+    kubectl -n nginx-demo rollout status deploy/nginx --timeout=180s
+    kubectl -n nginx-demo get svc nginx -o wide
+  displayName: 'kubectl apply & rollout status'
