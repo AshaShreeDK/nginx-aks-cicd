@@ -8,7 +8,7 @@ steps:
 - checkout: self
 
 - task: AzureCLI@2
-  displayName: 'AKS login, kubeconfig, apply (admin creds)'
+  displayName: 'AKS login, kubeconfig, apply'
   inputs:
     azureSubscription: 'azure-sub-connection'
     scriptType: bash
@@ -20,7 +20,10 @@ steps:
       MANIFESTS="k8s"
 
       az aks install-cli
-      az aks get-credentials -g "$RG" -n "$AKS" --admin --overwrite-existing
+      az aks get-credentials -g "$RG" -n "$AKS" --overwrite-existing
+      kubelogin convert-kubeconfig -l azurecli
+
+      kubectl auth can-i get nodes --all-namespaces
       kubectl get nodes -o wide
 
       kubectl apply -f "$MANIFESTS/namespace.yaml"
@@ -29,3 +32,9 @@ steps:
 
       kubectl -n nginx-demo rollout status deploy/nginx --timeout=180s
       kubectl -n nginx-demo get svc nginx -o wide
+
+- script: |
+    set -euo pipefail
+    IP=$(kubectl -n nginx-demo get svc nginx -o jsonpath="{.status.loadBalancer.ingress[0].ip}" || true)
+    if [ -n "${IP:-}" ]; then echo "http://$IP/"; else echo "No external IP yet"; fi
+  displayName: 'Show public URL'
